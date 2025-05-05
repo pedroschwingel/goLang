@@ -2,65 +2,109 @@ package main
 
 import (
 	//"container/list"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"gopkg.in/goquery.v1"
-	"encoding/json"
-	"os"
 )
-
 type datoPagina struct{
-	link string 
-	topico string 
+	Materia string `json: materia"`
+	Link    string `json:"link"`
+    Topico string `json:"topico"`
+
 }
-func obtenerUrls()[]*http.Response{
-	var paginas []*http.Response
+//menu
+func obtenerUrls(){
 	var link string
 	for{ 
-		fmt.Println("Ingrese el Url del foro al cual desea suscribirse o 0 para salir:")
+		fmt.Println("Ingrese el Url del foro al cual desea suscribirse, 0 para salir, 1 para remover materias:")
 		fmt.Scanln(&link)
 		if link == "0" {
 			break
 		}
-		resp,err := http.Get(link)
-		if err != nil {
-			fmt.Println("error, intente nuevamente")
-			}else{
-				paginas = append(paginas, resp)
+		if link == "1"{
+			imprimirInfo()
+			fmt.Println("ingrese el nombre de la materia")
+			fmt.Scanln(&link)
+			removerMateria(strings.ToLower(link))
+		}else{
+			
+			err := ingresarMateria(link)
+			if !err {
+				println("error al ingresar la materia")
 			}
 		}
-		return paginas
+			
+ 	}
 }
+func removerMateria(materia string) error{
+	existingData := make(map[string]datoPagina)
+	file,err := os.ReadFile("dados.json")
+	if err!=nil {
+		fmt.Println("error")
+		return err
+	}
+	json.NewDecoder(bytes.NewReader(file)).Decode(&existingData)
+	delete(existingData,materia)
+	filejs,err := json.Marshal(existingData)
+	if err !=nil{
+		return err
+	}
+	err = os.WriteFile("dados.json",filejs,0644)
+	if err !=nil{
+		return err
+	}
+	imprimirInfo()
+	return nil
+}
+// obtiene y imprime toda la informacion guardada en el json
 func imprimirInfo(){
-
+	existingData := make(map[string]datoPagina)
+	file,err := os.ReadFile("dados.json")
+	if err != nil{
+		println("error al imprimir:", err)
+	}
+	json.NewDecoder(bytes.NewReader(file)).Decode(&existingData)
+	if len(existingData)>0 {
+		fmt.Println(existingData)
+		return
+	}
+	fmt.Println("no hay materias agregadas")
 }
 
 func salvarEnJson(info datoPagina) error{
-	var existingData []datoPagina
-	data,err := json.Marshal(info)
-	if err != nil{		
-			return err
-	}
-	file , err := os.Open("dados.json")
+	existingData := make(map[string]datoPagina)
+	file , err := os.ReadFile("dados.json")
 	if os.IsNotExist(err){
-		err := os.WriteFile("dados.json",data,0644)
+		existingData[info.Materia] = info
+		data,err := json.Marshal(&existingData)
+		if err != nil{		
+			return err
+		}
+		err = os.WriteFile("dados.json",data,0644)
 		if err !=nil{
 			return err
 		}
 	}else{
-		json.NewDecoder(file).Decode(existingData)
-		existingData = append(existingData, info)
-		data,err = json.Marshal(&existingData)
+		println("agreguei")
+		json.NewDecoder(bytes.NewReader(file)).Decode(&existingData)
+		_,existe:= existingData[info.Materia]
+		if  existe{
+			println("Url ya agregada")
+			return nil
+		}
+		existingData[info.Materia] = info
+		data,err := json.Marshal(&existingData)
 		if err != nil{
 			return err
 		}
 		os.WriteFile("dados.json",data,0644)
 	}
-	defer file.Close()
 	return nil
 }
-
 func ingresarMateria(url string)bool{
 	resp,err := http.Get(url)
 	if err != nil {
@@ -71,53 +115,17 @@ func ingresarMateria(url string)bool{
 		return false
 	}
 	ultimaActualizacion :=doc.Find("tr.discussion th a").Eq(0)
+	materia :=doc.Find(".breadcrumb-item").Eq(1)
 	var infoPagina datoPagina
-	infoPagina.link = resp.Request.URL.String()
-	infoPagina.topico = ultimaActualizacion.Text()
+	infoPagina.Materia = strings.TrimSpace(materia.Text())
+	infoPagina.Link = strings.TrimSpace(resp.Request.URL.String())
+	infoPagina.Topico = strings.TrimSpace(ultimaActualizacion.Text())
 	salvarEnJson(infoPagina)
 	return true
 }
 }
-
-
-
-func imprimirMaterias(pages []*http.Response){
-	fmt.Println(len(pages))
-	for i := 0; i < len(pages); i++ {
-		doc, err := goquery.NewDocumentFromReader(pages[i].Body)
-		if err!=nil {
-			fmt.Println("bad things")
-		}
-		nombreCurso :=doc.Find(".breadcrumb-item").Eq(1)
-		fmt.Println("nombre del curso es:", nombreCurso.Text())
-		fmt.Println("las ultimas 5 actualizaciones fueron:")
-		dis := doc.Find("tr.discussion th a").Slice(0,5)
-		dis.Each(func(index int, element *goquery.Selection)  {
-			fmt.Println(strings.TrimSpace(element.Text()))
-		})
-	}
-}
 func main() { 
-
-	
-
-
-
-	pages := obtenerUrls()
-	fmt.Println(len(pages))
-	for i := 0; i < len(pages); i++ {
-		doc, err := goquery.NewDocumentFromReader(pages[i].Body)
-		if err!=nil {
-			fmt.Println("bad things")
-		}
-		nuevaMateria=ingresarMateria(doc)
-		nombreCurso :=doc.Find(".breadcrumb-item").Eq(1)
-		fmt.Println("nombre del curso es:", nombreCurso.Text())
-		fmt.Println("las ultimas 5 actualizaciones fueron:")
-		dis := doc.Find("tr.discussion th a").Slice(0,5)
-		dis.Each(func(index int, element *goquery.Selection)  {
-			fmt.Println(strings.TrimSpace(element.Text()))
-		})
-	}
+obtenerUrls()
+imprimirInfo()
 
 }
