@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-
 	"gopkg.in/goquery.v1"
 )
 type datoPagina struct{
@@ -112,7 +111,6 @@ func salvarEnJson(info datoPagina) error{
 			return err
 		}
 	}else{
-		println("agreguei")
 		json.NewDecoder(bytes.NewReader(file)).Decode(&existingData)
 		_,existe:= existingData[info.Materia]
 		if  existe{
@@ -137,10 +135,15 @@ func ingresarMateria(url string)bool{
 	if err!=nil {
 		return false
 	}
-	ultimaActualizacion :=doc.Find("tr.discussion th a").Eq(0)
-	materia :=doc.Find(".breadcrumb-item").Eq(1)
 	var infoPagina datoPagina
-	infoPagina.Materia = strings.TrimSpace(strings.ToLower(materia.Text()))
+	ultimaActualizacion :=doc.Find("tr.discussion th a").Eq(0)
+	doc.Find(".breadcrumb-item a").Each(func(i int, s *goquery.Selection){
+		print(s.Text())
+		href,exists := s.Attr("href")
+		if exists && strings.Contains(href, "/course/view.php"){
+			infoPagina.Materia = strings.TrimSpace(s.Text())
+		}
+	})
 	infoPagina.Link = strings.TrimSpace(resp.Request.URL.String())
 	infoPagina.Topico = strings.TrimSpace(ultimaActualizacion.Text())
 	salvarEnJson(infoPagina)
@@ -174,8 +177,8 @@ func actualizarDatos(){
 			datosExistentes[k] = temp
 			cambio.Link = datosExistentes[k].Link
 			cambio.Materia = strings.ToLower(datosExistentes[k].Materia)
-			cambio.Topico=  strings.TrimSpace(datosExistentes[k].Topico)
-			cambios= append(cambios, cambio)
+			cambio.Topico = strings.TrimSpace(datosExistentes[k].Topico)
+			cambios = append(cambios, cambio)
 		}
 	}
 	data,err :=json.Marshal(&datosExistentes)
